@@ -1,0 +1,280 @@
+---
+title: "Diversification Penalties"
+author: "Michael Jones"
+format: kakashi-revealjs
+execute: 
+  echo: false
+embed-resources: true
+---
+
+## 
+
+:::: {.columns}
+
+::: {.column width="50%"}
+![](front_cover.PNG)
+:::
+
+::: {.column width="50%"}
+*An unexpected Stochastic Dominance*
+
+
+
+```{r}
+#| error: false
+#| results: asis
+#| echo: false
+library(qrencoder)
+paper_url <- "https://arxiv.org/abs/2208.08471"
+# cat(qrencode_svg(paper_url))
+# cat(qrencode_png(paper_url))
+
+
+
+par(mar=c(0,0,0,0))
+image(qrencode_raster(paper_url), 
+      asp=1, col=c("white", "black"), axes=FALSE, 
+      xlab="", ylab="")
+```
+
+:::
+
+::::
+
+## Overview
+
+Main Idea of the paper
+
+Stochastic Dominance
+
+Pareto Distributions and fat tails
+
+Real world examples of fat tails
+
+Conclusions of the paper
+
+Considerations for our work
+
+
+
+## Main Idea
+
+**Specific** - There are instances where a concentration of risk is preferable to a diversified portfolio. For example, when losses are *Pareto distributed*.
+
+
+**General** - We make assumptions, shortcuts, heuristics all the time. That's fine, but we need to be aware when our *assumptions break down*.
+
+
+## Stochastic Dominance
+
+$$
+X \le_{st} Y \leftrightarrow P(X \le x) \ge P(Y \le x) \forall x \in \mathbb{R}
+$$
+
+A partial order of random variables
+
+"$X$ is smaller than  $Y$ in terms of first-order stochastic dominance"
+
+
+## Stochastic Dominance
+
+```{r}
+#| echo: false
+library(tidyverse)
+bind_rows(
+  tibble(x = seq(0,1,0.01), y = qnorm(x) + 10 - 0.2, label = "X"),
+  tibble(x = seq(0,1,0.01), y = qnorm(x) + 10 + 0.2, label = "Y")
+) |>
+  ggplot(aes(x = y, y = x, colour = label)) + 
+  geom_line() +
+  theme_bw() +
+  scale_x_continuous(labels = scales::comma) + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "x", y = "P(X < x)",
+       colour = NULL) +
+  theme(legend.position = "bottom") +
+  ggokabeito::scale_color_okabe_ito()
+```
+
+
+## Stochastic Dominance
+
+> The relation $X \le_{st} Y$ means that all decision makers with an increasing utility function will prefer the loss $X$ to the loss $Y$
+
+(page 2)
+
+## Pareto Distribution
+
+$$
+CDF: P_{\alpha,\theta} = 1 - \left(\frac{\theta}{x}\right)^\alpha, x \ge \theta\\
+Mean = \begin{cases}
+\infty  & \alpha\le 1 \\
+\frac{\alpha\theta}{\alpha - 1} & \alpha > 1
+\end{cases}\\
+$$
+
+$$
+\alpha \leftarrow \text{$``$shape''}\\
+\theta \leftarrow \text{$``$scale''}
+$$
+
+
+## Pareto Distribution
+
+Infinite mean on the distribution itself, not on (a finite set of) samples from the distribution.
+
+## Pareto Distribution
+
+```{r}
+#| warning: false
+#| echo: false
+#| fig-width: 12
+#| fig-height: 10
+library(actuar)
+
+gen_block <- function(shape) {
+  tibble(shape = shape,
+         x_move = rpareto(1000, shape, 1)*(-1)^rbernoulli(1000) |> intersperse(0) |> lead(default = 0),
+         y_move = rpareto(1000, shape, 1)*(-1)^rbernoulli(1000) |> intersperse(0),
+         x = cumsum(x_move),
+         y = cumsum(y_move))
+}
+
+ 
+intersperse <- function(v, w) {
+  map(v, \(x) c(x, w)) |>
+    flatten() |>
+    as.vector(mode = mode(v))
+}
+
+set.seed(20240116)
+
+c(100, 10, 5,4,3,2,1.5,1.1,1,0.8,0.6,0.4)|> map(gen_block) |>
+  bind_rows() |>
+  mutate(shape = factor(shape),
+         shape = fct_rev(shape)) |>
+  ggplot(aes(x = x, y = y)) +
+  geom_path() +
+  facet_wrap(~shape, scales = "free") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(subtitle = "1,000 step random walks, scale parameter = 1, shape parameter shown in heading")
+```
+
+
+## Examples of Pareto Risks
+
+Earthquakes $\alpha \in [0.5, 1.5]$
+
+Wind (some) $\alpha \approx 0.7$
+
+Nuclear power accidents $\alpha \in [0.6, 0.7]$
+
+Operational losses in banking $\alpha \in [0.7, 1.2]$ 
+
+Cyber losses $\alpha \in [0.6, 0.7]$
+
+Swiss Solvency Test (airline losses) $\alpha = 1$
+
+Commercial Property losses at 2 Lloyds Syndicates $\alpha$ "considerably less than 1"
+
+Number of deaths in earthquakes and pandemics
+
+
+(page 5)
+
+## Key Conclusions of the Paper
+
+For $X, X_1, ..., X_n \sim \text{Pareto}(\alpha), \alpha \in (0,1]$
+
+For $\theta_1, ..., \theta_n \in \Delta_n$, 
+
+$$
+X \le_{st}\sum_{i = 1}^n \theta_i X_i
+$$
+
+And for $t > 1$,
+
+$$
+P\left(\sum_{i = 1}^n \theta_i X_i > t \right) > P(X > t)
+$$
+
+if $\theta_i > 0$ for at least 2 $i \in [n]$
+
+(Theorem 1, page 6)
+
+
+## Key Conclusions of the Paper
+
+Having shares in multiple Pareto risks is **less preferable** to having full exposure to a single Pareto Risk
+
+(This is **not** the case if the underlying distributions have finite mean)
+
+
+## Key Conclusions of the Paper
+
+Generalised to random weights of random counts of Pareto Risks
+
+> It is less risky to insure one large policy than to insure any independent policies of the same type of ultra-heavy-tailed Pareto losses and thus the basic principle of insurance does not apply  to ultra-heavy-tailed Pareto losses
+
+(page 9)
+
+## Key Conclusions of the Paper
+
+Also shows that under pooling of risk (e.g. sharing CAT losses):
+
+Each insurer expects to suffer lower losses on **their** loss, 
+
+but each insurer will have a **higher frequency** of bearing a loss. 
+
+The combination leads to a **higher probability of default** of the insurer at any capital reserve level 
+
+(page 12)
+
+## Key Conclusions of the Paper
+
+An insurance market cannot exist among a set of insurers each exposed to their own Pareto loss.
+
+But under certain circumstances, including external entities with sufficient risk appetite can produce a market. **Reinsurance still works**.
+
+## My Conclusions
+
+
+:::: {.columns}
+
+::: {.column width="60%"}
+Diversification Penalties can exist
+
+Heavy tailed distributions are unintuitive, but more common than we might think
+
+We make many assumptions and simplifications, generally fine, but sometimes not
+
+You don't really understand your tools if you don't know when *not* to use them
+
+:::
+
+::: {.column width="40%"}
+
+Link to paper:
+
+```{r}
+#| error: false
+#| results: asis
+#| echo: false
+library(qrencoder)
+paper_url <- "https://arxiv.org/abs/2208.08471"
+# cat(qrencode_svg(paper_url))
+# cat(qrencode_png(paper_url))
+
+
+
+par(mar=c(0,0,0,0))
+image(qrencode_raster(paper_url), 
+      asp=1, col=c("white", "black"), axes=FALSE, 
+      xlab="", ylab="")
+```
+
+:::
+
+::::
+
